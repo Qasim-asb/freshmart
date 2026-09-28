@@ -1,9 +1,13 @@
 import { ArrowRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { products } from '../../data/products'
+import { useGetProductsQuery } from '../../features/products/productApi'
 import ProductCard from '../products/ProductCard'
 
 const FeaturedProducts = () => {
+  const { data, isLoading, isError, refetch } = useGetProductsQuery()
+
+  const products = data?.products || []
+
   return (
     <section className='bg-gray-50 py-14 sm:py-16 lg:py-20'>
       <div className='mx-auto max-w-7xl px-4 sm:px-6 lg:px-8'>
@@ -21,8 +25,23 @@ const FeaturedProducts = () => {
           </Link>
         </div>
 
-        <div className='mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
-          {products.slice(0, 6).map(product => <ProductCard key={product.id} product={product} />)}
+        <div className='mt-8'>
+          {isLoading ? (
+            <p className='text-sm text-gray-500'>Loading products...</p>
+          ) : isError ? (
+            <div className='rounded-2xl bg-white p-6 text-center'>
+              <p className='text-sm text-red-500'>Failed to load featured products.</p>
+              <button type='button' onClick={refetch} className='mt-3 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700'>
+                Try again
+              </button>
+            </div>
+          ) : products.length > 0 ? (
+            <div className='grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
+              {products.slice(0, 6).map(product => <ProductCard key={product._id} product={product} />)}
+            </div>
+          ) : (
+            <p className='mt-8 text-center text-gray-500'>No products available yet.</p>
+          )}
         </div>
       </div>
     </section>

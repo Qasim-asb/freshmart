@@ -1,35 +1,38 @@
 import { useState } from 'react'
 import { ArrowLeft, CheckCircle2, MapPin, ShoppingBag } from 'lucide-react'
-import { useDispatch, useSelector } from 'react-redux'
 import { Link, useNavigate } from 'react-router-dom'
-import { clearCart } from '../features/cart/cartSlice'
-import { addOrder } from '../features/orders/ordersSlice'
 import { calculateDeliveryFee, calculateOrderTotal, calculateSubtotal, calculateTotalItems } from '../utils/order'
 import { formatCurrency } from '../utils/format'
+import FormInput from '../components/ui/FormInput'
+import { useGetCartQuery } from '../features/cart/cartApi'
+import { useCreateOrderMutation } from '../features/orders/orderApi'
 
 const Checkout = () => {
-  const dispatch = useDispatch()
-  const navigate = useNavigate()
-
-  const cartItems = useSelector(state => state.cart.items)
-
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
     phone: '',
     address: '',
     city: '',
-    postalCode: '',
+    postalCode: ''
   })
 
   const [errors, setErrors] = useState({})
+  const [orderError, setOrderError] = useState('')
+
+  const navigate = useNavigate()
+
+  const { data, isLoading, isError, refetch } = useGetCartQuery()
+  const [createOrder, { isLoading: isPlacingOrder }] = useCreateOrderMutation()
+
+  const cartItems = (data?.cart?.items || []).map(item => ({
+    ...item.productId,
+    quantity: item.quantity
+  }))
 
   const subtotal = calculateSubtotal(cartItems)
-
   const deliveryFee = calculateDeliveryFee(subtotal)
-
   const orderTotal = calculateOrderTotal(subtotal)
-
   const totalItems = calculateTotalItems(cartItems)
 
   const handleInputChange = (e) => {
@@ -45,9 +48,7 @@ const Checkout = () => {
   const validateForm = () => {
     const newErrors = {}
 
-    if (!formData.fullName.trim()) {
-      newErrors.fullName = 'Full name is required'
-    }
+    if (!formData.fullName.trim()) newErrors.fullName = 'Full name is required'
 
     if (!formData.email.trim()) {
       newErrors.email = 'Email address is required'
@@ -55,52 +56,58 @@ const Checkout = () => {
       newErrors.email = 'Enter a valid email address'
     }
 
-    if (!formData.phone.trim()) {
-      newErrors.phone = 'Phone number is required'
-    }
-
-    if (!formData.address.trim()) {
-      newErrors.address = 'Street address is required'
-    }
-
-    if (!formData.city.trim()) {
-      newErrors.city = 'City is required'
-    }
-
-    if (!formData.postalCode.trim()) {
-      newErrors.postalCode = 'Postal code is required'
-    }
+    if (!formData.phone.trim()) newErrors.phone = 'Phone number is required'
+    if (!formData.address.trim()) newErrors.address = 'Street address is required'
+    if (!formData.city.trim()) newErrors.city = 'City is required'
+    if (!formData.postalCode.trim()) newErrors.postalCode = 'Postal code is required'
 
     setErrors(newErrors)
-
     return Object.keys(newErrors).length === 0
   }
 
-  const handlePlaceOrder = () => {
-    if (!validateForm()) {
-      return
+  const handlePlaceOrder = async () => {
+    if (!validateForm()) return
+
+    setOrderError('')
+
+    try {
+      const response = await createOrder(formData).unwrap()
+      const order = response?.order
+
+      if (!order?._id) {
+        throw new Error('Order was created but no order ID was returned.')
+      }
+      navigate(`/order-confirmation/${order._id}`, { replace: true })
+    } catch (err) {
+      setOrderError(
+        err?.data?.message ||
+        err?.data?.error ||
+        err?.message ||
+        'Failed to place order. Please try again.'
+      )
     }
+  }
 
-    const orderId = `FM-${crypto.randomUUID()}`
+  if (isLoading) {
+    return (
+      <section className='flex min-h-[60vh] items-center justify-center bg-gray-50 px-4 py-16'>
+        <p className='text-sm text-gray-500'>Loading your cart...</p>
+      </section>
+    )
+  }
 
-    const newOrder = {
-      id: orderId,
-      customer: formData,
-      items: cartItems,
-      subtotal,
-      deliveryFee,
-      total: orderTotal,
-      status: 'Confirmed',
-      createdAt: new Date().toISOString()
-    }
-
-    dispatch(addOrder(newOrder))
-
-    navigate('/order-confirmation', {
-      state: { orderId }
-    })
-
-    dispatch(clearCart())
+  if (isError) {
+    return (
+      <section className='flex min-h-[60vh] items-center justify-center bg-gray-50 px-4 py-16'>
+        <div className='text-center'>
+          <h1 className='text-2xl font-bold text-gray-900'>Unable to load checkout</h1>
+          <p className='mt-2 text-sm text-gray-500'>Please try again in a moment.</p>
+          <button type='button' onClick={refetch} className='mt-6 rounded-xl bg-green-600 px-5 py-3 text-sm font-semibold text-white hover:bg-green-700'>
+            Try again
+          </button>
+        </div>
+      </section>
+    )
   }
 
   if (cartItems.length === 0) {
@@ -151,23 +158,9 @@ const Checkout = () => {
               </div>
 
               <div className='mt-6 grid gap-5 sm:grid-cols-2'>
-                <div className='sm:col-span-2'>
-                  <label className='text-sm font-medium text-gray-700'>Full name</label>
-                  <input name='fullName' type='text' value={formData.fullName} onChange={handleInputChange} placeholder='Enter your name' className={`mt-2 w-full rounded-xl border bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-green-500 ${errors.fullName ? 'border-red-300' : 'border-gray-200'}`} />
-                  {errors.fullName && <p className='mt-1 text-xs text-red-500'>{errors.fullName}</p>}
-                </div>
-
-                <div>
-                  <label className='text-sm font-medium text-gray-700'>Email address</label>
-                  <input name='email' type='email' value={formData.email} onChange={handleInputChange} placeholder='Enter you email' className={`mt-2 w-full rounded-xl border bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-green-500 ${errors.email ? 'border-red-300' : 'border-gray-200'}`} />
-                  {errors.email && <p className='mt-1 text-xs text-red-500'>{errors.email}</p>}
-                </div>
-
-                <div>
-                  <label className='text-sm font-medium text-gray-700'>Phone number</label>
-                  <input name='phone' type='tel' value={formData.phone} onChange={handleInputChange} placeholder='+923407852942' className={`mt-2 w-full rounded-xl border bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-green-500 ${errors.phone ? 'border-red-300' : 'border-gray-200'}`} />
-                  {errors.phone && <p className='mt-1 text-xs text-red-500'>{errors.phone}</p>}
-                </div>
+                <FormInput label='Full name' name='fullName' type='text' value={formData.fullName} onChange={handleInputChange} placeholder='Enter your name' error={errors.fullName} devSpan='sm:col-span-2' className='mt-2' />
+                <FormInput label='Email address' name='email' type='email' value={formData.email} onChange={handleInputChange} placeholder='Enter your email' error={errors.email} className='mt-2' />
+                <FormInput label='Phone number' name='phone' type='tel' value={formData.phone} onChange={handleInputChange} placeholder='+923407852942' error={errors.phone} className='mt-2' />
               </div>
             </div>
 
@@ -183,24 +176,11 @@ const Checkout = () => {
               </div>
 
               <div className='mt-6 space-y-5'>
-                <div>
-                  <label className='text-sm font-medium text-gray-700'>Street address</label>
-                  <input name='address' type='text' value={formData.address} onChange={handleInputChange} placeholder='123 Main Street' className={`mt-2 w-full rounded-xl border bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-green-500 ${errors.address ? 'border-red-300' : 'border-gray-200'}`} />
-                  {errors.address && <p className='mt-1 text-xs text-red-500'>{errors.address}</p>}
-                </div>
+                <FormInput label='Street address' name='address' type='text' value={formData.address} onChange={handleInputChange} placeholder='123 Main Street' error={errors.address} className='mt-2' />
 
                 <div className='grid gap-5 sm:grid-cols-2'>
-                  <div>
-                    <label className='text-sm font-medium text-gray-700'>City</label>
-                    <input name='city' type='text' value={formData.city} onChange={handleInputChange} placeholder='Attock' className={`mt-2 w-full rounded-xl border bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-green-500 ${errors.city ? 'border-red-300' : 'border-gray-200'}`} />
-                    {errors.city && <p className='mt-1 text-xs text-red-500'>{errors.city}</p>}
-                  </div>
-
-                  <div>
-                    <label className='text-sm font-medium text-gray-700'>Postal code</label>
-                    <input name='postalCode' type='text' value={formData.postalCode} onChange={handleInputChange} placeholder='10001' className={`mt-2 w-full rounded-xl border bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-green-500 ${errors.postalCode ? 'border-red-300' : 'border-gray-200'}`} />
-                    {errors.postalCode && <p className='mt-1 text-xs text-red-500'>{errors.postalCode}</p>}
-                  </div>
+                  <FormInput label='City' name='city' type='text' value={formData.city} onChange={handleInputChange} placeholder='Attock' error={errors.city} className='mt-2' />
+                  <FormInput label='Postal code' name='postalCode' type='text' value={formData.postalCode} onChange={handleInputChange} placeholder='10001' error={errors.postalCode} className='mt-2' />
                 </div>
               </div>
             </div>
@@ -210,9 +190,9 @@ const Checkout = () => {
             <h2 className='text-lg font-bold text-gray-900'>Order summary</h2>
             <div className='mt-6 space-y-4'>
               {cartItems.map(item => (
-                <div key={item.id} className='flex items-center gap-3'>
+                <div key={item._id} className='flex items-center gap-3'>
                   <div className='h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-gray-50'>
-                    <img src={item.image} alt={item.name} className='h-full w-full object-cover' />
+                    <img src={item.image?.url} alt={item.name} className='h-full w-full object-cover' />
                   </div>
 
                   <div className='min-w-0 flex-1'>
@@ -236,7 +216,9 @@ const Checkout = () => {
               </div>
               <div className='flex items-center justify-between text-sm'>
                 <span className='text-gray-500'>Delivery</span>
-                <span className='font-semibold text-green-600'>{deliveryFee === 0 ? 'FREE' : `${formatCurrency(deliveryFee)}`}</span>
+                <span className='font-semibold text-green-600'>
+                  {deliveryFee === 0 ? 'FREE' : formatCurrency(deliveryFee)}
+                </span>
               </div>
 
               <div className='border-t border-gray-100 pt-4'>
@@ -247,7 +229,11 @@ const Checkout = () => {
               </div>
             </div>
 
-            <button type='button' onClick={handlePlaceOrder} className='mt-6 w-full rounded-xl bg-green-600 px-5 py-3 font-semibold text-white transition-colors hover:bg-green-700'>Place order</button>
+            {orderError && <div className='mt-5 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600'>{orderError}</div>}
+
+            <button type='button' onClick={handlePlaceOrder} disabled={isPlacingOrder} className='mt-6 w-full rounded-xl bg-green-600 px-5 py-3 font-semibold text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60'>
+              {isPlacingOrder ? 'Placing order...' : 'Place order'}
+            </button>
           </aside>
         </div>
       </div>

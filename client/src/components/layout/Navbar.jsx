@@ -1,18 +1,28 @@
 import { useEffect, useRef, useState } from 'react'
 import { Heart, Menu, Search, ShoppingCart, User, X } from 'lucide-react'
-import { useSelector } from 'react-redux'
 import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../../features/auth/useAuth'
+import { useLogoutMutation } from '../../features/auth/authApi'
+import { useGetCartQuery } from '../../features/cart/cartApi'
+import { useGetFavoritesQuery } from '../../features/favorites/favoriteApi'
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [isAccountOpen, setIsAccountOpen] = useState(false)
+
+  const { user, isAdmin, isAuthenticated } = useAuth()
+  const [logout, { isLoading }] = useLogoutMutation()
+
+  const { data: cartData } = useGetCartQuery(undefined, { skip: !isAuthenticated })
+  const { data: favoriteData } = useGetFavoritesQuery(undefined, { skip: !isAuthenticated })
 
   const headerRef = useRef(null)
   const navigate = useNavigate()
 
-  const cartItems = useSelector(state => state.cart.items)
-  const favoriteItems = useSelector(state => state.favorites.items)
+  const cartItems = cartData?.cart?.items || []
+  const favoriteItems = favoriteData?.items || []
 
   const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0)
 
@@ -20,9 +30,10 @@ const Navbar = () => {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if ((isMenuOpen || isSearchOpen) && !headerRef.current.contains(e.target)) {
+      if ((isMenuOpen || isSearchOpen || isAccountOpen) && headerRef.current && !headerRef.current.contains(e.target)) {
         setIsMenuOpen(false)
         setIsSearchOpen(false)
+        setIsAccountOpen(false)
       }
     }
 
@@ -34,13 +45,14 @@ const Navbar = () => {
       document.removeEventListener('mousedown', handleClickOutside)
       document.body.style.overflow = ''
     }
-  }, [isMenuOpen, isSearchOpen])
+  }, [isMenuOpen, isSearchOpen, isAccountOpen])
 
   useEffect(() => {
     const handleEscape = (e) => {
       if (e.key === 'Escape') {
         setIsMenuOpen(false)
         setIsSearchOpen(false)
+        setIsAccountOpen(false)
       }
     }
 
@@ -52,11 +64,19 @@ const Navbar = () => {
   const handleMenu = () => {
     setIsMenuOpen(prev => !prev)
     setIsSearchOpen(false)
+    setIsAccountOpen(false)
   }
 
   const handleSearchInput = () => {
     setIsSearchOpen(prev => !prev)
     setIsMenuOpen(false)
+    setIsAccountOpen(false)
+  }
+
+  const handleAccount = () => {
+    setIsAccountOpen(prev => !prev)
+    setIsMenuOpen(false)
+    setIsSearchOpen(false)
   }
 
   const handleSearchSubmit = (e) => {
@@ -74,6 +94,29 @@ const Navbar = () => {
 
     navigate(`/shop?search=${encodeURIComponent(trimmedSearchTerm)}`)
   }
+
+  const handleLogout = async () => {
+    setIsAccountOpen(false)
+    setIsMenuOpen(false)
+
+    try {
+      await logout().unwrap()
+      navigate('/', { replace: true })
+    } catch (error) {
+      console.error('Logout failed:', error)
+    }
+  }
+
+  const accountLinks = !isAuthenticated
+    ? []
+    : isAdmin ? [
+      { label: 'Admin Dashboard', to: '/admin' },
+      { label: 'My Orders', to: '/my-orders' }
+    ]
+      : [
+        { label: 'My Account', to: '/account' },
+        { label: 'My Orders', to: '/my-orders' }
+      ]
 
   return (
     <header ref={headerRef} className='fixed inset-x-0 top-0 z-50 border-b border-gray-100 bg-white/95 shadow-sm backdrop-blur'>
@@ -109,9 +152,45 @@ const Navbar = () => {
             <ShoppingCart className='h-5 w-5' />
             {cartCount > 0 && <span className='absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-green-600 px-1 text-[10px] font-semibold text-white'>{cartCount}</span>}
           </Link>
-          <button type='button' className='hidden md:block rounded-full p-2 text-gray-600 transition-colors hover:bg-green-50 hover:text-green-600'>
-            <User className='h-5 w-5' />
-          </button>
+
+          <div className='relative hidden md:block'>
+            <button type='button' onClick={handleAccount} className={`rounded-full p-2 transition-colors ${isAccountOpen ? 'bg-green-50 text-green-600' : 'text-gray-600 hover:bg-green-50 hover:text-green-600'}`}>
+              <User className='h-5 w-5' />
+            </button>
+
+            {isAccountOpen && (
+              <div className='absolute right-0 top-full mt-2 w-52 rounded-xl border border-gray-100 bg-white p-2 shadow-lg'>
+                {isAuthenticated ? (
+                  <>
+                    <div className='border-b border-gray-100 px-3 py-2'>
+                      <p className='text-xs text-gray-400'>Signed in as</p>
+                      <p className='mt-0.5 text-sm font-semibold capitalize text-gray-900'>{user?.role}</p>
+                    </div>
+
+                    {accountLinks.map(link => (
+                      <Link key={link.to} to={link.to} onClick={() => setIsAccountOpen(false)} className='block rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-green-50 hover:text-green-600'>
+                        {link.label}
+                      </Link>
+                    ))}
+
+                    <button type='button' disabled={isLoading} onClick={handleLogout} className='w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-red-500 transition-colors hover:bg-red-50'>
+                      {isLoading ? 'Logging out...' : 'Logout'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Link to='/login' onClick={() => setIsAccountOpen(false)} className='block rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-green-50 hover:text-green-600'>
+                      Sign In
+                    </Link>
+                    <Link to='/signup' onClick={() => setIsAccountOpen(false)} className='block rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-green-50 hover:text-green-600'>
+                      Sign Up
+                    </Link>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
           <button type='button' onClick={handleMenu} className='rounded-full p-2 text-gray-600 transition-colors hover:bg-gray-100 md:hidden'>
             {isMenuOpen ? <X className='h-5 w-5' /> : <Menu className='h-5 w-5' />}
           </button>
@@ -147,10 +226,36 @@ const Navbar = () => {
               <span>Cart</span>
               {cartCount > 0 && <span className='rounded-full bg-green-600 px-2 py-0.5 text-xs font-semibold text-white'>{cartCount}</span>}
             </Link>
-            <button type='button' onClick={() => setIsMenuOpen(false)} className='flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium text-gray-700 transition-colors hover:bg-green-50 hover:text-green-600' >
-              <User className='h-5 w-5' />
-              <span>Account</span>
-            </button>
+
+            {isAuthenticated ? (
+              <>
+                <div className='border-t border-gray-100 pt-2'>
+                  <div className='px-3 py-2'>
+                    <p className='text-xs text-gray-400'>Signed in as</p>
+                    <p className='mt-0.5 text-sm font-semibold capitalize text-gray-900'>{user?.role}</p>
+                  </div>
+
+                  {accountLinks.map(link => (
+                    <Link key={link.to} to={link.to} onClick={() => setIsMenuOpen(false)} className='block rounded-lg px-3 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-green-50 hover:text-green-600'>
+                      {link.label}
+                    </Link>
+                  ))}
+
+                  <button type='button' disabled={isLoading} onClick={handleLogout} className='w-full rounded-lg px-3 py-3 text-left text-sm font-medium text-red-500 transition-colors hover:bg-red-50'>
+                    {isLoading ? 'Logging out...' : 'Logout'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className='border-t border-gray-100 pt-2'>
+                <Link to='/login' onClick={() => setIsMenuOpen(false)} className='block rounded-lg px-3 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-green-50 hover:text-green-600'>
+                  Sign In
+                </Link>
+                <Link to='/signup' onClick={() => setIsMenuOpen(false)} className='block rounded-lg px-3 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-green-50 hover:text-green-600'>
+                  Sign Up
+                </Link>
+              </div>
+            )}
           </div>
         </nav>
       </div>

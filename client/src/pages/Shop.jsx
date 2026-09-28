@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { Search } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import ProductCard from '../components/products/ProductCard'
-import { categories } from '../data/categories'
-import { products } from '../data/products'
+import { useGetCategoriesQuery } from '../features/categories/categoryApi'
+import { useGetProductsQuery } from '../features/products/productApi'
 
 const Shop = () => {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -13,7 +13,17 @@ const Shop = () => {
 
   const searchTimerRef = useRef(null)
 
-  const categoryNames = ['All', ...categories.map(category => category.name),]
+  const { data: categoryData } = useGetCategoriesQuery()
+
+  const categories = categoryData?.categories || []
+  const categoryNames = ['All', ...categories.map(category => category.name)]
+
+  const { data, isLoading, isFetching, isError, refetch } = useGetProductsQuery({
+    search: searchFromUrl,
+    category: categoryFromUrl
+  })
+
+  const products = data?.products || []
 
   useEffect(() => {
     return () => {
@@ -56,17 +66,7 @@ const Shop = () => {
     setSearchParams(nextParams)
   }
 
-  const filteredProducts = useMemo(() => {
-    const normalizedSearchTerm = searchFromUrl.trim().toLowerCase()
-
-    return products.filter(product => {
-      const matchesCategory = categoryFromUrl === 'All' || product.category === categoryFromUrl
-
-      const matchesSearch = !normalizedSearchTerm || product.name.toLowerCase().includes(normalizedSearchTerm) || product.category.toLowerCase().includes(normalizedSearchTerm)
-
-      return matchesCategory && matchesSearch
-    })
-  }, [categoryFromUrl, searchFromUrl])
+  const isBusy = isLoading || isFetching
 
   return (
     <section className='bg-gray-50 py-10 sm:py-12 lg:py-16'>
@@ -95,25 +95,35 @@ const Shop = () => {
         </div>
 
         <div className='mt-8'>
-          <p className='text-sm text-gray-500'>
-            {filteredProducts.length}{' '}
-            {filteredProducts.length === 1
-              ? 'product'
-              : 'products'}{' '}
-            found
-          </p>
-        </div>
+          {isBusy ? (
+            <p className='text-sm text-gray-500'>Loading products...</p>
+          ) : isError ? (
+            <div className='rounded-2xl bg-white p-6 text-center'>
+              <p className='text-sm text-red-500'>Failed to load products.</p>
+              <button type='button' onClick={refetch} className='mt-3 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700'>
+                Try again
+              </button>
+            </div>
+          ) : (
+            <>
+              <p className='text-sm text-gray-500'>
+                {products.length}{' '}
+                {products.length === 1 ? 'product' : 'products'} found
+              </p>
 
-        {filteredProducts.length > 0 ? (
-          <div className='mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
-            {filteredProducts.map(product => <ProductCard key={product.id} product={product} />)}
-          </div>
-        ) : (
-          <div className='mt-4 rounded-2xl bg-white px-6 py-16 text-center'>
-            <h2 className='text-lg font-semibold text-gray-900'>No products found</h2>
-            <p className='mt-2 text-sm text-gray-500'>Try a different search term or category.</p>
-          </div>
-        )}
+              {products.length > 0 ? (
+                <div className='mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
+                  {products.map(product => <ProductCard key={product._id} product={product} />)}
+                </div>
+              ) : (
+                <div className='mt-4 rounded-2xl bg-white px-6 py-16 text-center'>
+                  <h2 className='text-lg font-semibold text-gray-900'>No products found</h2>
+                  <p className='mt-2 text-sm text-gray-500'>Try a different search term or category.</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </section>
   )

@@ -1,23 +1,26 @@
-import { ArrowLeft, CheckCircle2, Circle, ShoppingBag } from 'lucide-react'
-import { useSelector } from 'react-redux'
-import { Link, useLocation, useParams } from 'react-router-dom'
-import { formatCurrency } from '../utils/format'
+import { ArrowLeft, CheckCircle2, Circle, ShoppingBag, XCircle } from 'lucide-react'
+import { Link, useParams } from 'react-router-dom'
+import { useGetOrderByIdQuery } from '../features/orders/orderApi'
+import { formatCurrency, formatDate } from '../utils/format'
+
+const PROGRESS_STATUSES = ['Confirmed', 'Preparing', 'Out for Delivery', 'Delivered']
 
 const OrderConfirmation = () => {
-  const location = useLocation()
-  const { orderId: urlOrderId } = useParams()
+  const { orderId } = useParams()
 
-  const orders = useSelector(state => state.orders.orders)
+  const { data, isLoading, isError } = useGetOrderByIdQuery(orderId, { skip: !orderId })
 
-  const orderId = urlOrderId || location.state?.orderId
+  const order = data?.order
 
-  const order = orders.find(item => item.id === orderId)
+  if (isLoading) {
+    return (
+      <section className='flex min-h-[60vh] items-center justify-center bg-gray-50 px-4 py-16'>
+        <p className='text-sm text-gray-500'>Loading order...</p>
+      </section>
+    )
+  }
 
-  const statuses = ['Confirmed', 'Preparing', 'Out for Delivery', 'Delivered']
-
-  const currentStatusIndex = order ? statuses.indexOf(order.status) : -1
-
-  if (!order) {
+  if (isError || !order) {
     return (
       <section className='flex min-h-[60vh] items-center justify-center bg-gray-50 px-4 py-16'>
         <div className='text-center'>
@@ -40,6 +43,9 @@ const OrderConfirmation = () => {
     )
   }
 
+  const isCancelled = order.status === 'Cancelled'
+  const currentStatusIndex = PROGRESS_STATUSES.indexOf(order.status)
+
   return (
     <section className='bg-gray-50 py-12 sm:py-16 lg:py-20'>
       <div className='mx-auto max-w-3xl px-4 sm:px-6 lg:px-8'>
@@ -51,19 +57,27 @@ const OrderConfirmation = () => {
         </div>
 
         <div className='rounded-3xl border border-gray-100 bg-white p-6 text-center shadow-sm sm:p-10'>
-          <div className='mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-green-100 text-green-600'>
-            <CheckCircle2 className='h-12 w-12' />
+          <div className={`mx-auto flex h-20 w-20 items-center justify-center rounded-full ${isCancelled ? 'bg-red-100 text-red-500' : 'bg-green-100 text-green-600'}`}>
+            {isCancelled ? <XCircle className='h-12 w-12' /> : <CheckCircle2 className='h-12 w-12' />}
           </div>
-          <p className='mt-6 text-sm font-semibold uppercase tracking-wider text-green-600'>Order confirmed</p>
-          <h1 className='mt-2 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl'>Thank you for your order!</h1>
+          <p className={`mt-6 text-sm font-semibold uppercase tracking-wider ${isCancelled ? 'text-red-500' : 'text-green-600'}`}>
+            {isCancelled ? 'Order cancelled' : 'Order confirmed'}
+          </p>
+          <h1 className='mt-2 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl'>
+            {isCancelled ? 'This order was cancelled' : 'Thank you for your order!'}
+          </h1>
           <p className='mx-auto mt-3 max-w-xl text-sm leading-6 text-gray-500 sm:text-base'>
-            Your order has been placed successfully. We'll prepare your fresh groceries for delivery.
+            {isCancelled ? 'This order is no longer active. If this looks wrong, please contact support.' : "Your order has been placed successfully. We'll prepare your fresh groceries for delivery."}
           </p>
           <div className='mt-8 rounded-2xl bg-gray-50 p-5 text-left'>
             <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
               <div>
                 <p className='text-xs font-medium uppercase tracking-wider text-gray-400'>Order number</p>
-                <p className='mt-1 break-all font-bold text-gray-900'>{order.id}</p>
+                <p className='mt-1 break-all font-bold text-gray-900'>{order._id}</p>
+              </div>
+              <div className='sm:text-right'>
+                <p className='text-xs font-medium uppercase tracking-wider text-gray-400'>Placed on</p>
+                <p className='mt-1 font-semibold text-gray-900'>{formatDate(order.createdAt)}</p>
               </div>
               <div className='sm:text-right'>
                 <p className='text-xs font-medium uppercase tracking-wider text-gray-400'>Total</p>
@@ -72,35 +86,32 @@ const OrderConfirmation = () => {
             </div>
           </div>
 
-          <div className='mt-6 rounded-2xl border border-gray-100 p-5 text-left'>
-            <h2 className='text-lg font-bold text-gray-900'>Order status</h2>
-            <div className='mt-5 grid gap-4 sm:grid-cols-4'>
-              {statuses.map((status, index) => {
-                const completed = index <= currentStatusIndex
+          {!isCancelled && (
+            <div className='mt-6 rounded-2xl border border-gray-100 p-5 text-left'>
+              <h2 className='text-lg font-bold text-gray-900'>Order status</h2>
+              <div className='mt-5 grid gap-4 sm:grid-cols-4'>
+                {PROGRESS_STATUSES.map((status, i) => {
+                  const completed = i <= currentStatusIndex
 
-                return (
-                  <div key={status} className='flex items-center gap-2 sm:flex-col sm:items-center sm:text-center'>
-                    {completed ? (
-                      <CheckCircle2 className='h-5 w-5 shrink-0 text-green-600' />
-                    ) : (
-                      <Circle className='h-5 w-5 shrink-0 text-gray-300' />
-                    )}
-                    <span className={`text-sm font-medium ${completed ? 'text-green-600' : 'text-gray-400'}`}>{status}</span>
-                  </div>
-                )
-              })}
+                  return (
+                    <div key={status} className='flex items-center gap-2 sm:flex-col sm:items-center sm:text-center'>
+                      {completed ? <CheckCircle2 className='h-5 w-5 shrink-0 text-green-600' /> : <Circle className='h-5 w-5 shrink-0 text-gray-300' />}
+                      <span className={`text-sm font-medium ${completed ? 'text-green-600' : 'text-gray-400'}`}>
+                        {status}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           <div className='mt-6 text-left'>
             <h2 className='text-lg font-bold text-gray-900'>Delivery details</h2>
             <div className='mt-4 rounded-2xl border border-gray-100 p-5'>
               <p className='font-semibold text-gray-900'>{order.customer.fullName}</p>
               <p className='mt-2 text-sm text-gray-500'>{order.customer.address}</p>
-              <p className='text-sm text-gray-500'>
-                {order.customer.city},{' '}
-                {order.customer.postalCode}
-              </p>
+              <p className='text-sm text-gray-500'>{order.customer.city}, {order.customer.postalCode}</p>
               <p className='mt-2 text-sm text-gray-500'>{order.customer.phone}</p>
               <p className='text-sm text-gray-500'>{order.customer.email}</p>
             </div>
@@ -110,12 +121,13 @@ const OrderConfirmation = () => {
             <h2 className='text-lg font-bold text-gray-900'>Items ordered</h2>
             <div className='mt-4 space-y-3'>
               {order.items.map(item => (
-                <div key={item.id} className='flex items-center gap-3 rounded-xl border border-gray-100 p-3'>
-                  <img src={item.image} alt={item.name} className='h-14 w-14 rounded-lg object-cover' />
+                <div key={item.productId} className='flex items-center gap-3 rounded-xl border border-gray-100 p-3'>
+                  <img src={item.image?.url} alt={item.name} className='h-14 w-14 rounded-lg object-cover' />
                   <div className='min-w-0 flex-1'>
                     <p className='truncate text-sm font-semibold text-gray-900'>{item.name}</p>
                     <p className='mt-1 text-xs text-gray-500'>
-                      {item.quantity} × {formatCurrency(item.price)}
+                      {item.quantity} × {formatCurrency(item.price)}{' '}
+                      {item.unit && `/ ${item.unit}`}
                     </p>
                   </div>
                   <p className='text-sm font-semibold text-gray-900'>{formatCurrency(item.price * item.quantity)}</p>
@@ -132,7 +144,9 @@ const OrderConfirmation = () => {
               </div>
               <div className='flex items-center justify-between text-sm'>
                 <span className='text-gray-500'>Delivery</span>
-                <span className='font-medium text-green-600'>{order.deliveryFee === 0 ? 'FREE' : `${formatCurrency(order.deliveryFee)}`}</span>
+                <span className='font-medium text-green-600'>
+                  {order.deliveryFee === 0 ? 'FREE' : formatCurrency(order.deliveryFee)}
+                </span>
               </div>
               <div className='border-t border-gray-100 pt-3'>
                 <div className='flex items-center justify-between'>

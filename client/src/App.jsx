@@ -12,6 +12,12 @@ import Checkout from './pages/Checkout'
 import OrderConfirmation from './pages/OrderConfirmation'
 import MyOrders from './pages/MyOrders'
 import NotFound from './pages/NotFound'
+import AdminDashboard from './pages/admin/AdminDashboard'
+import Account from './pages/Account'
+import Signup from './pages/Signup'
+import Login from './pages/Login'
+import ProtectedRoute from './components/auth/ProtectedRoute'
+import AdminRoute from './components/auth/AdminRoute'
 
 const App = () => {
   return (
@@ -27,12 +33,24 @@ const App = () => {
             <Route path='/shop' element={<Shop />} />
             <Route path='/categories' element={<Categories />} />
             <Route path='/cart' element={<Cart />} />
-            <Route path='/checkout' element={<Checkout />} />
             <Route path='/favorites' element={<Favorites />} />
-            <Route path='/my-orders' element={<MyOrders />} />
             <Route path='/product/:id' element={<ProductDetails />} />
-            <Route path='/order-confirmation' element={<OrderConfirmation />} />
-            <Route path='/order-confirmation/:orderId' element={<OrderConfirmation />} />
+            <Route path='/signup' element={<Signup />} />
+            <Route path='/login' element={<Login />} />
+
+            <Route element={<ProtectedRoute />}>
+              <Route path='/account' element={<Account />} />
+              <Route path='/checkout' element={<Checkout />} />
+              <Route path='/my-orders' element={<MyOrders />} />
+              <Route path='/order-confirmation/:orderId' element={<OrderConfirmation />} />
+            </Route>
+
+            <Route element={<ProtectedRoute />}>
+              <Route element={<AdminRoute />}>
+                <Route path='/admin' element={<AdminDashboard />} />
+              </Route>
+            </Route>
+
             <Route path='*' element={<NotFound />} />
           </Routes>
         </main>

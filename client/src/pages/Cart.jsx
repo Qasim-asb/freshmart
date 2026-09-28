@@ -1,15 +1,24 @@
-import { Minus, Plus, ShoppingCart, Trash2, } from 'lucide-react'
-import { useDispatch, useSelector } from 'react-redux'
+import { Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { clearCart, decreaseQuantity, increaseQuantity, removeFromCart, } from '../features/cart/cartSlice'
+import { useClearCartMutation, useGetCartQuery, useRemoveFromCartMutation, useUpdateCartItemMutation } from '../features/cart/cartApi'
 import { calculateDeliveryFee, calculateOrderTotal, calculateSubtotal, calculateTotalItems, FREE_DELIVERY_THRESHOLD } from '../utils/order'
 import { formatCurrency } from '../utils/format'
 
 const Cart = () => {
-  const dispatch = useDispatch()
-  const cartItems = useSelector(state => state.cart.items)
+  const { data, isLoading, isError } = useGetCartQuery()
 
-  const subtotal = calculateSubtotal(cartItems)
+  const [updateCartItem, { isLoading: isUpdating }] = useUpdateCartItemMutation()
+  const [removeFromCart, { isLoading: isRemoving }] = useRemoveFromCartMutation()
+  const [clearCart, { isLoading: isClearing }] = useClearCartMutation()
+
+  const cartItems = data?.cart?.items || []
+
+  const items = cartItems.map(item => ({
+    ...item.productId,
+    quantity: item.quantity
+  }))
+
+  const subtotal = calculateSubtotal(items)
 
   const deliveryFee = calculateDeliveryFee(subtotal)
 
@@ -19,7 +28,52 @@ const Cart = () => {
 
   const orderTotal = calculateOrderTotal(subtotal)
 
-  const totalItems = calculateTotalItems(cartItems)
+  const totalItems = calculateTotalItems(items)
+
+  const isBusy = isUpdating || isRemoving || isClearing
+
+  const handleIncrease = (productId, quantity) => {
+    updateCartItem({
+      productId,
+      quantity: quantity + 1
+    })
+  }
+
+  const handleDecrease = (productId, quantity) => {
+    updateCartItem({
+      productId,
+      quantity: quantity - 1
+    })
+  }
+
+  const handleRemove = (productId) => {
+    removeFromCart(productId)
+  }
+
+  const handleClear = () => {
+    clearCart()
+  }
+
+  if (isLoading) {
+    return (
+      <section className='flex min-h-[60vh] items-center justify-center bg-gray-50 px-4 py-16'>
+        <p className='text-sm text-gray-500'>Loading your cart...</p>
+      </section>
+    )
+  }
+
+  if (isError) {
+    return (
+      <section className='flex min-h-[60vh] items-center justify-center bg-gray-50 px-4 py-16'>
+        <div className='text-center'>
+          <h1 className='text-2xl font-bold text-gray-900'>Unable to load your cart</h1>
+          <p className='mt-2 text-sm text-gray-500'>
+            Please try again in a moment.
+          </p>
+        </div>
+      </section>
+    )
+  }
 
   if (cartItems.length === 0) {
     return (
@@ -28,9 +82,19 @@ const Cart = () => {
           <div className='mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-green-100 text-green-600'>
             <ShoppingCart className='h-10 w-10' />
           </div>
-          <h1 className='mt-6 text-2xl font-bold text-gray-900'>Your cart is empty</h1>
-          <p className='mt-2 text-sm text-gray-500'>Add some fresh groceries to get started.</p>
-          <Link to='/shop' className='mt-6 inline-flex rounded-xl bg-green-600 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-green-700'>
+
+          <h1 className='mt-6 text-2xl font-bold text-gray-900'>
+            Your cart is empty
+          </h1>
+
+          <p className='mt-2 text-sm text-gray-500'>
+            Add some fresh groceries to get started.
+          </p>
+
+          <Link
+            to='/shop'
+            className='mt-6 inline-flex rounded-xl bg-green-600 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-green-700'
+          >
             Start shopping
           </Link>
         </div>
@@ -55,47 +119,46 @@ const Cart = () => {
             <Link to='/shop' className='rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:border-green-200 hover:bg-green-50 hover:text-green-600'>
               Continue shopping
             </Link>
-            <button type='button' onClick={() => dispatch(clearCart())} className='rounded-lg border border-red-100 bg-white px-4 py-2 text-sm font-semibold text-red-500 transition-colors hover:bg-red-50'>
-              Clear cart
+            <button type='button' onClick={handleClear} disabled={isBusy} className='rounded-lg border border-red-100 bg-white px-4 py-2 text-sm font-semibold text-red-500 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50'>
+              {isClearing ? 'Clearing...' : 'Clear cart'}
             </button>
           </div>
         </div>
 
         <div className='mt-8 grid gap-8 lg:grid-cols-[1fr_360px]'>
           <div className='space-y-4'>
-            {cartItems.map(item => (
-              <div key={item.id} className='flex flex-col gap-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:flex-row sm:items-center'>
-                <div className='h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-gray-50'>
-                  <img src={item.image} alt={item.name} className='h-full w-full object-cover' />
-                </div>
+            {cartItems.map(item => {
+              const product = item.productId
+              const productId = product._id
 
-                <div className='min-w-0 flex-1'>
-                  <p className='text-xs font-medium text-gray-400'>{item.category}</p>
-                  <h2 className='mt-1 font-semibold text-gray-900'>{item.name}</h2>
-                  <p className='mt-1 text-sm font-semibold text-green-600'>
-                    {formatCurrency(item.price)} / {item.unit}
-                  </p>
-                </div>
-
-                <div className='flex items-center justify-between gap-4 sm:justify-end'>
-                  <div className='flex items-center rounded-lg border border-gray-200'>
-                    <button type='button' onClick={() => dispatch(decreaseQuantity(item.id))} className='p-2 text-gray-500 transition-colors hover:text-green-600'>
-                      <Minus className='h-4 w-4' />
-                    </button>
-                    <span className='min-w-8 text-center text-sm font-semibold text-gray-900'>{item.quantity}</span>
-                    <button type='button' onClick={() => dispatch(increaseQuantity(item.id))} className='p-2 text-gray-500 transition-colors hover:text-green-600'>
-                      <Plus className='h-4 w-4' />
+              return (
+                <div key={productId} className='flex flex-col gap-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:flex-row sm:items-center'>
+                  <div className='h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-gray-50'>
+                    <img src={product.image?.url} alt={product.name} className='h-full w-full object-cover' />
+                  </div>
+                  <div className='min-w-0 flex-1'>
+                    <p className='text-xs font-medium text-gray-400'>{product.category}</p>
+                    <h2 className='mt-1 font-semibold text-gray-900'>{product.name}</h2>
+                    <p className='mt-1 text-sm font-semibold text-green-600'>{formatCurrency(product.price)} / {product.unit}</p>
+                  </div>
+                  <div className='flex items-center justify-between gap-4 sm:justify-end'>
+                    <div className='flex items-center rounded-lg border border-gray-200'>
+                      <button type='button' onClick={() => handleDecrease(productId, item.quantity)} disabled={isBusy || item.quantity <= 1} className='p-2 text-gray-500 transition-colors hover:text-green-600 disabled:cursor-not-allowed disabled:opacity-50'>
+                        <Minus className='h-4 w-4' />
+                      </button>
+                      <span className='min-w-8 text-center text-sm font-semibold text-gray-900'>{item.quantity}</span>
+                      <button type='button' onClick={() => handleIncrease(productId, item.quantity)} disabled={isBusy || item.quantity >= product.stock} className='p-2 text-gray-500 transition-colors hover:text-green-600 disabled:cursor-not-allowed disabled:opacity-50'>
+                        <Plus className='h-4 w-4' />
+                      </button>
+                    </div>
+                    <p className='w-20 text-right font-bold text-gray-900'>{formatCurrency(product.price * item.quantity)}</p>
+                    <button type='button' onClick={() => handleRemove(productId)} disabled={isBusy} className='rounded-full p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50'>
+                      <Trash2 className='h-4 w-4' />
                     </button>
                   </div>
-                  <p className='w-20 text-right font-bold text-gray-900'>
-                    ${(item.price * item.quantity).toFixed(2)}
-                  </p>
-                  <button type='button' onClick={() => dispatch(removeFromCart(item.id))} className='rounded-full p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500'>
-                    <Trash2 className='h-4 w-4' />
-                  </button>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           <aside className='h-fit rounded-2xl border border-gray-100 bg-white p-6 shadow-sm'>

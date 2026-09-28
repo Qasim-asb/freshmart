@@ -1,11 +1,40 @@
 import { CalendarDays, ChevronRight, Package, ShoppingBag } from 'lucide-react'
-import { useSelector } from 'react-redux'
 import { Link } from 'react-router-dom'
 import { calculateTotalItems } from '../utils/order'
 import { formatCurrency, formatDate } from '../utils/format'
+import { useGetMyOrdersQuery } from '../features/orders/orderApi'
 
 const MyOrders = () => {
-  const orders = useSelector(state => state.orders.orders)
+  const { data, isLoading, isError } = useGetMyOrdersQuery()
+
+  const orders = data?.orders || []
+
+  if (isLoading) {
+    return (
+      <section className='flex min-h-[60vh] items-center justify-center bg-gray-50 px-4 py-16'>
+        <div className='text-center'>
+          <div className='mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100 text-green-600'>
+            <Package className='h-6 w-6 animate-pulse' />
+          </div>
+          <p className='mt-4 text-sm font-medium text-gray-500'>Loading your orders...</p>
+        </div>
+      </section>
+    )
+  }
+
+  if (isError) {
+    return (
+      <section className='flex min-h-[60vh] items-center justify-center bg-gray-50 px-4 py-16'>
+        <div className='text-center'>
+          <div className='mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-red-100 text-red-500'>
+            <Package className='h-10 w-10' />
+          </div>
+          <h1 className='mt-6 text-2xl font-bold text-gray-900'>Unable to load orders</h1>
+          <p className='mt-2 text-sm text-gray-500'>Something went wrong while loading your orders. Please try again.</p>
+        </div>
+      </section>
+    )
+  }
 
   if (orders.length === 0) {
     return (
@@ -39,7 +68,7 @@ const MyOrders = () => {
             const totalItems = calculateTotalItems(order.items)
 
             return (
-              <div key={order.id} className='rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md sm:p-6'>
+              <div key={order._id} className='rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition-shadow hover:shadow-md sm:p-6'>
                 <div className='flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between'>
                   <div className='flex min-w-0 items-start gap-4'>
                     <div className='flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-green-100 text-green-600'>
@@ -67,7 +96,8 @@ const MyOrders = () => {
                       <p className='mt-1 text-lg font-bold text-green-600'>{formatCurrency(order.total)}</p>
                     </div>
                     <span className='inline-flex w-fit rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-700'>{order.status}</span>
-                    <Link to={`/order-confirmation/${order.id}`} className='inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:border-green-200 hover:bg-green-50 hover:text-green-600'>
+
+                    <Link to={`/order-confirmation/${order._id}`} className='inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:border-green-200 hover:bg-green-50 hover:text-green-600'>
                       View order
                       <ChevronRight className='h-4 w-4' />
                     </Link>
@@ -77,8 +107,9 @@ const MyOrders = () => {
                 <div className='mt-5 border-t border-gray-100 pt-5'>
                   <div className='flex gap-3 overflow-x-auto pb-1'>
                     {order.items.slice(0, 5).map(item => (
-                      <div key={item.id} className='flex shrink-0 items-center gap-2 rounded-xl bg-gray-50 px-3 py-2'>
-                        <img src={item.image} alt={item.name} className='h-10 w-10 rounded-lg object-cover' />
+                      <div key={item.productId} className='flex shrink-0 items-center gap-2 rounded-xl bg-gray-50 px-3 py-2'>
+                        <img src={item.image?.url} alt={item.name} className='h-10 w-10 rounded-lg object-cover' />
+
                         <div className='max-w-32'>
                           <p className='truncate text-xs font-semibold text-gray-800'>{item.name}</p>
                           <p className='text-xs text-gray-500'>Qty: {item.quantity}</p>
